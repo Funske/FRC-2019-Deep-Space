@@ -1,9 +1,11 @@
 package frc.robot.subsystems;
 
 import edu.wpi.first.wpilibj.DigitalInput;
+import edu.wpi.first.wpilibj.DoubleSolenoid;
+import edu.wpi.first.wpilibj.DoubleSolenoid.Value;
 import edu.wpi.first.wpilibj.command.Subsystem;
-import frc.robot.Robot;
 import frc.robot.RobotMap;
+import frc.robot.util.RobotMath;
 
 import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.ctre.phoenix.motorcontrol.FeedbackDevice;
@@ -17,24 +19,28 @@ public class DriveTrain extends Subsystem{
     TalonSRX left_front, right_front;
     TalonSRX left_rear, right_rear;
     public PigeonIMU pigeon;
-    DigitalInput lineC = new DigitalInput(RobotMap.CENTER_FOLLOWER), 
-    lineL = new DigitalInput(RobotMap.LEFT_FOLLOWER), 
-    lineR = new DigitalInput(RobotMap.RIGHT_FOLLOWER);
 
     public boolean slaveSet = false, pidSet = false;
     public boolean highGear = true;
+
     //Sensor Phase
-    private boolean left_phase = true, right_phase = true;
+    private boolean left_phase = false, right_phase = false;
     //Inverted
     private InvertType left_inverted = InvertType.None, right_inverted = InvertType.InvertMotorOutput;
 
-    public double teleopSpeed = 1.0, autoSpeed = 0.5;
-    public double timeToFullOpen = 1.0, timeToFullClosed = 0.05;
+    //Speeds
+    private double teleopSpeed = 1.0;
+    private double timeToFullOpen = 0.25, timeToFullClosed = 0.25;
+    private double currentSpeed = 1.0;
+    private boolean forward_locked = false;
+    public boolean is_angle_lock = false;
+    public double angle_lock = 0;
 
-    public static enum DriverStatus{Control, Distance, Follow, Vision};
+    //Drive Train Status
+    public static enum DriverStatus{Control, Vision};
     public DriverStatus status = DriverStatus.Control;
 
-    public double timestamp = 0.2;//Seconds between motion calculations
+    public DoubleSolenoid gearChange = new DoubleSolenoid(RobotMap.GEAR_IN, RobotMap.GEAR_OUT);
 
     public void initDefaultCommand(){
 
@@ -51,19 +57,19 @@ public class DriveTrain extends Subsystem{
         right_rear = new TalonSRX(RobotMap.RIGHT_REAR);
         pigeon = new PigeonIMU(right_rear);
 
+        left_inverted = InvertType.InvertMotorOutput;
+        right_inverted = InvertType.None;
+
         setSlaves();
-        if(setSensors)
-            setSensors();
+        setMaxSpeed(currentSpeed);
+        setSensors();
     }
 
     void setSlaves(){
         left_rear.follow(left_front);
         right_rear.follow(right_front);
 
-        left_front.setNeutralMode(NeutralMode.Brake);
-        left_rear.setNeutralMode(NeutralMode.Brake);
-        right_front.setNeutralMode(NeutralMode.Brake);
-        right_rear.setNeutralMode(NeutralMode.Brake);
+        setBrakeMode(NeutralMode.Brake);
 
         left_front.configNeutralDeadband(0.05);
         left_rear.configNeutralDeadband(0.05);
@@ -75,8 +81,8 @@ public class DriveTrain extends Subsystem{
         right_front.setInverted(right_inverted);
         right_rear.setInverted(InvertType.FollowMaster);
 
-        setPeakSpeed(left_front, teleopSpeed);
-        setPeakSpeed(right_front, teleopSpeed);
+        RobotMath.setPeakSpeed(left_front, teleopSpeed);
+        RobotMath.setPeakSpeed(right_front, teleopSpeed);
 
         slaveSet = true;
     }
@@ -85,13 +91,15 @@ public class DriveTrain extends Subsystem{
         if(!slaveSet)
             return;
 
-        setPID(left_front);
-        setPID(right_front);
+        RobotMath.setPID(left_front, RobotMap.DRIVEPID_HIGH);
+        RobotMath.setPID(right_front, RobotMap.DRIVEPID_HIGH);
+        RobotMath.setPID(left_front, RobotMap.DRIVEPID_LOW);
+        RobotMath.setPID(right_front, RobotMap.DRIVEPID_LOW);
 
-        left_front.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, RobotMap.SLOT_INDEX, RobotMap.TIMEOUT);
+        left_front.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, 0, RobotMap.TIMEOUT);
         left_front.setSensorPhase(left_phase);
 
-        right_front.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, RobotMap.SLOT_INDEX, RobotMap.TIMEOUT);
+        right_front.configSelectedFeedbackSensor(FeedbackDevice.CTRE_MagEncoder_Relative, 0, RobotMap.TIMEOUT);
         right_front.setSensorPhase(right_phase);
 
         left_front.configOpenloopRamp(timeToFullOpen);
@@ -107,16 +115,23 @@ public class DriveTrain extends Subsystem{
         pidSet = true;
     }
 
-    void setPID(TalonSRX talon){
-        talon.config_kP(RobotMap.SLOT_INDEX, RobotMap.PGAIN, RobotMap.TIMEOUT);
-        talon.config_kI(RobotMap.SLOT_INDEX, RobotMap.IGAIN, RobotMap.TIMEOUT);
-        talon.config_kD(RobotMap.SLOT_INDEX, RobotMap.DGAIN, RobotMap.TIMEOUT);
-        talon.config_kF(RobotMap.SLOT_INDEX, RobotMap.FGAIN, RobotMap.TIMEOUT);
+    public void setBrakeMode(NeutralMode mode){
+        left_front.setNeutralMode(mode);
+        left_rear.setNeutralMode(mode);
+        right_front.setNeutralMode(mode);
+        right_rear.setNeutralMode(mode);
     }
 
-    public void setPeakSpeed(TalonSRX talon, double peak){
-        talon.configPeakOutputForward(peak);
-        talon.configPeakOutputReverse(-peak);
+    public void setMaxSpeed(double speed){
+        currentSpeed = speed;
+        RobotMath.setPeakSpeed(left_front, speed);
+        RobotMath.setPeakSpeed(left_rear, speed);
+        RobotMath.setPeakSpeed(right_front, speed);
+        RobotMath.setPeakSpeed(right_rear, speed);
+    }
+
+    public double getMaxSpeed(){
+        return currentSpeed;
     }
 
     public void resetPosition(){
@@ -124,15 +139,36 @@ public class DriveTrain extends Subsystem{
         right_front.setSelectedSensorPosition(0);
     }
 
+    public void setStatus(DriverStatus status){
+        this.status = status;
+    }
+
+    public DriverStatus getStatus(){
+        return status;
+    }
+
     public void tankDrive(double left, double right){
+        double turn_throttle = 0;
+        if(is_angle_lock){//Angle is locked
+            turn_throttle = (angle_lock - getAngle()) * 0.004 - getGyroRate() * 0.0004;
+        }
+
         left_front.set(ControlMode.PercentOutput, left);
         right_front.set(ControlMode.PercentOutput, right);
     }
 
-    int count = 0;
     public void tankDriveVelocity(double left, double right){
-        left_front.set(ControlMode.Velocity, left);
-        right_front.set(ControlMode.Velocity, right);
+        if(forward_locked){
+            right = left;
+            double turn_throttle = (angle_lock - getAngle()) * 0.004 - (getGyroRate() * 0.0004);
+            turn_throttle *= 0.3;
+
+            left = RobotMath.capSpeed(left - turn_throttle);
+            right = RobotMath.capSpeed(left + turn_throttle);
+        }
+
+        left_front.set(ControlMode.Velocity, left*getMaxVelocity());
+        right_front.set(ControlMode.Velocity, right*getMaxVelocity());
     }
 
     public void setPercent(double left, double right){
@@ -144,16 +180,83 @@ public class DriveTrain extends Subsystem{
         setPercent(percent, percent);
     }
 
+    public void toggleHighGear(){
+        highGear = !highGear;
+        if(highGear){
+            gearChange.set(Value.kForward);
+            System.out.println("High Gear");
+            left_front.selectProfileSlot(RobotMap.DRIVEPID_HIGH.getSlotIndex(), 0);
+            right_front.selectProfileSlot(RobotMap.DRIVEPID_HIGH.getSlotIndex(), 0);
+        }else{
+            gearChange.set(Value.kReverse);
+            System.out.println("Low Gear");
+            left_front.selectProfileSlot(RobotMap.DRIVEPID_LOW.getSlotIndex(), 0);
+            right_front.selectProfileSlot(RobotMap.DRIVEPID_LOW.getSlotIndex(), 0);
+        }
+    }
+
+    public void lowGear(){
+        highGear = false;
+        gearChange.set(Value.kReverse);
+        System.out.println("Low Gear");
+        left_front.selectProfileSlot(RobotMap.DRIVEPID_LOW.getSlotIndex(), 0);
+        right_front.selectProfileSlot(RobotMap.DRIVEPID_LOW.getSlotIndex(), 0);
+    }
+
+    public void lockForward(){
+        forward_locked = true;
+    }
+
+    public void unlockForward(){
+        forward_locked = false;
+    }
+
+    public int getMaxVelocity(){
+        if(highGear)
+            return RobotMap.MAX_VELOCITY_HIGH;
+        return RobotMap.MAX_VELOCITY;
+    }
+
+    public void testMaxVelocity(){
+        resetGyro();
+        int maxGyroAngle = 10;//Number of times to rotate
+        double startTime = System.currentTimeMillis()*1000;//Seconds
+        while(Math.abs(getAngle()) < 360*maxGyroAngle){
+            setPercent(1, -1);
+        }
+        long endTime = System.currentTimeMillis()*1000;//Seconds
+        System.out.println("[RESULTS] Start Time: " + (startTime) + " | End Time: " + (endTime) + " | Difference: " + (endTime-startTime));
+    }
+
+    public void testMaxVelocityLine(){
+        setPercent(1.0, 1.0);
+    }
+
     public void resetGyro(){
+        pigeon.setYaw(0);
         pigeon.setFusedHeading(0);
     }
 
+    public void setGyro(double angle){
+        pigeon.setYaw(angle);
+        pigeon.setFusedHeading(angle);
+    }
+
     public double getAngle(){
-        //double[] data = new double[3];
-        //pigeon.getRawGyro(data);
         PigeonIMU.FusionStatus fusion = new PigeonIMU.FusionStatus();
         pigeon.getFusedHeading(fusion);
         return fusion.heading;
+    }
+
+    public double getAngle360(){//Returns and angle (-360, 360)
+        double temp = getAngle();
+        return (Math.abs(temp) % 180)*Math.signum(temp);
+    }
+
+    public double getGyroRate(){
+        double[] xyz = new double[3];
+        pigeon.getRawGyro(xyz);
+        return xyz[2];
     }
 
     public int getLeftPosition(){
@@ -164,55 +267,12 @@ public class DriveTrain extends Subsystem{
         return right_front.getSelectedSensorPosition();
     }
 
-    public void driveDistance(int inches){//Drive set distance on left and right
-        driveDistance(inches, inches);
-    }
-
     public double capSpeed(double speed){//Caps value from -1 to 1
         return Math.min(Math.abs(speed), 1);
     }
 
-    public void driveDistance(int inchesL, int inchesR){//Drive a left distance, drive a right distance
-        status = DriverStatus.Distance;//Take over driver control
-        left_front.set(ControlMode.Position, getLeftPosition()+inchesToNative(inchesL)); 
-        right_front.set(ControlMode.Position, getRightPosition()+inchesToNative(inchesR));
-    }
-
     //Native Units: 1 rotation / circumference = 4096 Native
     public double inchesToNative(int inches){
-        return (inches/RobotMap.WHEEL_CIRCUMFERENCE)*RobotMap.NATIVE_UNITS;
-    }
-    
-    public boolean detectLine(){
-        String line = getLineBinary();
-        return line.charAt(0) == '1' || line.charAt(1) == '1' || line.charAt(2) == '1';
-    }
-
-    public String getLineBinary(){
-        StringBuilder sb = new StringBuilder();
-        sb.append(lineL.get() ? '1' : '0');
-        sb.append(lineC.get() ? '1' : '0');
-        sb.append(lineR.get() ? '1' : '0');
-        return sb.toString();
-    }
-
-    //pre-condition found line at farthest end
-    public void followLine(){//TODO: Account for drift
-        double speed = Robot.input.getLineSpeed();
-        switch(getLineBinary()){
-            case "010"://We are centered
-                setPercent(speed, -speed);
-            break;
-            case "100"://Left Only
-                setPercent(-speed/2, -speed);
-            break;
-            case "001"://Right Only
-                setPercent(speed, speed/2);
-            break;
-            case "000"://There is no line detected anymore
-                setPercent(0);
-                status = DriverStatus.Control;//Go back to driver controll
-            break;
-        }
+        return (inches/RobotMap.WHEEL_CIRCUMFERENCE)*RobotMap.ENCODER_UNITS;
     }
 }
