@@ -12,16 +12,20 @@ import java.io.File;
 import com.ctre.phoenix.motorcontrol.NeutralMode;
 
 import edu.wpi.cscore.UsbCamera;
+import edu.wpi.cscore.VideoMode;
+import edu.wpi.cscore.VideoMode.PixelFormat;
 import edu.wpi.first.cameraserver.CameraServer;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardLayout;
 import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import frc.robot.input.Input;
 import frc.robot.shuffleboard.ElevatorWidget;
+import frc.robot.shuffleboard.FieldTargetWidget;
 import frc.robot.shuffleboard.VisionTargetWidget;
 import frc.robot.subsystems.DriveTrain;
 import frc.robot.subsystems.Elevator;
@@ -60,21 +64,11 @@ public class Robot extends TimedRobot {
   private EncoderFollower vision_left, vision_right;
   private boolean followTragectory = false;
 
-  private int vision_updateCount = 0, vision_period = 25;
-  private boolean vision_updated = false;
-
   //Dashboard
   public ShuffleboardTab tab = Shuffleboard.getTab("Deep Space");
 
-  //public NetworkTableEntry network_maxTurn = Shuffleboard.getTab("Vision").add("Max Turn", max_turn).getEntry();
-  //public NetworkTableEntry network_maxForward = Shuffleboard.getTab("Vision").add("Max Forward", forward_throttle).getEntry();
-  public NetworkTableEntry robot_angle = Shuffleboard.getTab("SmartDashboard").add("Robot Angle", driveTrain.getAngle()).withPosition(7, 1).getEntry();
-  public NetworkTableEntry left_pos = Shuffleboard.getTab("SmartDashboard").add("Left Pos", driveTrain.getLeftPosition()).withPosition(7, 4).getEntry();
-  public NetworkTableEntry right_pos = Shuffleboard.getTab("SmartDashboard").add("Right Pos", driveTrain.getRightPosition()).withPosition(8, 4).getEntry();
-  public NetworkTableEntry calc_angle = Shuffleboard.getTab("SmartDashboard").add("Calc Angle", 0).withPosition(7, 2).getEntry();
-  public NetworkTableEntry adjusted_hor = Shuffleboard.getTab("SmartDashboard").add("Adjusted", 0).withPosition(7, 3).getEntry();
-
   public NetworkTableEntry target_angle;
+  public NetworkTableEntry speedMultiplyer, isTank, isArcade, isSideways, maxElevatorHeight;
 
   //Rocket Near: 0 | Rocket Cargo: 1 | Rocket Far: 2 | Cargo Left: 3 | Cargo Front: 4 | Cargo Right: 5 | Rocket Near: 6
   //Rocket Cargo: 7 | Rocket Far: 8 | Loading Sation: 9
@@ -82,80 +76,56 @@ public class Robot extends TimedRobot {
 
   @Override
   public void robotInit() {
-    UsbCamera cam = CameraServer.getInstance().startAutomaticCapture();
-    cam.setResolution(320, 180);
-    cam.setFPS(30);
+    CameraServer.getInstance().startAutomaticCapture().setResolution(320, 240);
     elevator.resetPosition();
-    tab.add("Elevator Info", elevator.getWidget());
-    tab.add("Compressor Current", comp.getCompressorCurrent());
-    target_angle = tab.add("Target Angle", RobotMap.NEAR_ROCKET_ANGLE).getEntry();
-    //tab.add("Vision Info", visionWidget);
-  }
 
-  @Override
-  public void robotPeriodic() {
+    //Dashboard Setup
+    tab.add("Elevator Info", elevator.getWidget());
+    target_angle = tab.add("Target Angle", RobotMap.NEAR_ROCKET_ANGLE).withPosition(10, 0).withSize(2, 1).getEntry();
+    speedMultiplyer = tab.add("Speed Multiplyer", 1.0).withPosition(10, 1).withSize(2, 1).getEntry();
+    maxElevatorHeight = tab.add("Max Elevator Height", 72500).withPosition(10, 2).withSize(2, 1).getEntry();
+
+    isTank = tab.add("Is Tank", false).withWidget("Toggle Button").withPosition(12, 0).getEntry();
+    isArcade = tab.add("Is Arcade", false).withWidget("Toggle Button").withPosition(12, 1).getEntry();
+    isSideways = tab.add("Is Sideways", true).withWidget("Toggle Button").withPosition(12, 2).getEntry();
   }
 
   @Override
   public void disabledInit() {
     driveTrain.setBrakeMode(NeutralMode.Coast);
-    //elevator.setCoast();
-  }
-
-  int addative = 1;
-  @Override
-  public void disabledPeriodic() {
-    //addative *= -1;
-    double target_yaw = SmartDashboard.getNumber("target_yaw", 0);//Radians
-    double target_distance = SmartDashboard.getNumber("target_distance", 0);//In inches
-    robot_angle.forceSetDouble(driveTrain.getAngle360());
-    double calculatedAngle = (driveTrain.getAngle360()-Math.toDegrees(target_yaw))-32;//Degrees
-    calculatedAngle = (driveTrain.getAngle360()+Math.toDegrees(target_yaw))-32;
-    //calculatedAngle = -Math.toDegrees(target_yaw)-32;
-    double end_x = Math.abs(target_distance*Math.cos(Math.toRadians(calculatedAngle)));//Meters
-    double end_y = Math.abs(target_distance*Math.sin(Math.toRadians(calculatedAngle)));//Meters
-    calc_angle.forceSetDouble(calculatedAngle);
-    left_pos.forceSetDouble(end_x);
-    right_pos.forceSetDouble(end_y);
-    adjusted_hor.forceSetDouble(end_y*Math.cos(Math.toRadians(driveTrain.getAngle360())));
-    //left_pos.forceSetDouble(driveTrain.getLeftPosition()+addative);
-    //right_pos.forceSetDouble(driveTrain.getRightPosition()+addative);
-
   }
 
   @Override
   public void autonomousInit() {
-    teleopInit();
-  }
-
-  @Override
-  public void autonomousPeriodic() {
-    teleopPeriodic();
-  }
-
-  public void teleopInit() {
-    zeroed = true;
-    vision_init = false;
-    driveTrain.status = DriverStatus.Control;
-    driveTrain.setBrakeMode(NeutralMode.Brake);
     driveTrain.resetGyro();
     driveTrain.resetPosition();
     driveTrain.lowGear();
     elevator.setLevel(0);
-
-    //forward_throttle = network_maxForward.getDouble(0.5);
-    //max_turn = network_maxTurn.getDouble(0.5);
+    intake.setHatchIntake(true);
+    intake.setHatchDrop(true);
     gyro_align = new GyroPID(max_turn);
-
-    //VisionInit();
+    teleopInit();
   }
 
-  int lineCount = 0;
+  public void teleopInit() {
+    if(!RobotMap.COMPETITON_MODE){//Not in competition mode
+      driveTrain.resetGyro();
+      driveTrain.resetPosition();
+      driveTrain.lowGear();
+      elevator.setLevel(0);
+      gyro_align = new GyroPID(max_turn);
+    }
+
+    zeroed = true;
+    vision_init = false;
+    driveTrain.status = DriverStatus.Control;
+    driveTrain.setBrakeMode(NeutralMode.Brake);
+    lift.setExtend(false);
+    driveTrain.tankDrive(0, 0);
+  }
+
   @Override
   public void teleopPeriodic() {
-    //int tape_detected = (int)SmartDashboard.getNumber("target_identified", 0);
-    //robot_angle.forceSetDouble(driveTrain.getAngle());
-
     switch(driveTrain.status){
       case Control://We have driver control
         input.InputPeriodic();
@@ -171,9 +141,9 @@ public class Robot extends TimedRobot {
         }
 
         VisionPeriodic();
-
-        /*if(tape_detected == 0)//We lost the vision tape
-          driveTrain.status = DriverStatus.Control;*/
+      break;
+      case Cargo:
+        CargoPeriodic();
       break;
     }
 
@@ -181,34 +151,62 @@ public class Robot extends TimedRobot {
   }
 
   public void ControlPeriodic(){
-    endPoint = target_angle.getDouble(RobotMap.NEAR_ROCKET_ANGLE);
+    elevator.elevatorPeriodic();
     angleDifference.forceSetDouble(driveTrain.getAngle360());
+    //field_target = fieldTarget.getTarget();
+
     if(elevator.getLevel() == 3 && elevator.getPosition() > 80000 && elevator.getVelocity() < 300 && elevator.getCargoMode()){
-      try{
-        Thread.sleep(100);//0.1s seconds
-      }catch(InterruptedException e){
-        System.out.println("Cargo Outtake Sleep Caught");
-      }
-
-      intake.setCargoMotor(-intake.cargoSpeed);//Outtake
-
-      try{
-        Thread.sleep(1000);//1s seconds
-      }catch(InterruptedException e){
-        System.out.println("Cargo Outtake Sleep Caught");
-      }
-
-      intake.setCargoMotor(0);
-      elevator.setLevel(2);
+      level3Action();
     }
-    if(elevator.getLevel() == 5 && elevator.getPosition() > 47000 && elevator.getPosition() < 50000){
+    if(elevator.getLevel() == 5 && elevator.getPosition() > 42000 && elevator.getPosition() < 47000){
+      intake.setCargoMotor(-intake.cargoSpeed);
+    }
+  }
+
+  void level3Action(){
+    try{
+      Thread.sleep(100);//0.1s seconds
+    }catch(InterruptedException e){
+      System.out.println("Cargo Outtake Sleep Caught");
+    }
+
+    intake.setCargoMotor(-intake.cargoSpeed);//Outtake
+
+    try{
+      Thread.sleep(1000);//1s seconds
+    }catch(InterruptedException e){
+      System.out.println("Cargo Outtake Sleep Caught");
+    }
+
+    intake.setCargoMotor(0);
+    elevator.setLevel(2);
+  }
+
+  private boolean cargo_forward = false;
+  public void CargoPeriodic(){
+    double target_yaw = SmartDashboard.getNumber("target_yaw", 0.0);
+    if(!gyro_align.hasSetpoint()){
+      gyro_align.setSetpoint(driveTrain.getAngle360()+Math.toDegrees(target_yaw));
+    }else if(!gyro_align.isFinished()){
+      double turn_throttle = gyro_align.pidUpdate(driveTrain.getAngle360(), driveTrain.getGyroRate());
+      driveTrain.tankDrive(-turn_throttle, turn_throttle);
+    }else if(gyro_align.isFinished()){
+      cargo_forward = true;
+    }
+
+    if(cargo_forward){
+      driveTrain.tankDrive(0.5, 0.5);
       intake.setCargoMotor(intake.cargoSpeed);
+
+      if(input.anyAxis())
+        driveTrain.setStatus(DriveTrain.DriverStatus.Control);
     }
   }
 
   public void VisionInit(){
     zeroed = false;
     followTragectory = false;
+    endPoint = getTargetAngle();
   }
 
   double endPoint = RobotMap.NEAR_ROCKET_ANGLE;
@@ -221,6 +219,12 @@ public class Robot extends TimedRobot {
     /*if(rotate_end == 0){//Can't travel in a straight line
       rotate_end = robot_angle+Math.toDegrees(target_yaw);
     }*/
+    if(!zeroed && input.isZeroed()){
+      zeroed = true;
+    }
+    if(zeroed && !input.isZeroed()){
+      driveTrain.setStatus(DriverStatus.Control);
+    }
 
     if(!followTragectory){//Current robot position casues inaccurate tragectory, fix that
       
@@ -247,10 +251,6 @@ public class Robot extends TimedRobot {
 
     }else//We have generated an accurate tragectory, now follow it
       FollowTragectory();
-  }
-
-  public void FollowPeriodic(){
-    
   }
 
   NetworkTableEntry angleDifference = Shuffleboard.getTab("SmartDashboard").add("Angle Difference", 0).getEntry();
@@ -314,7 +314,7 @@ public class Robot extends TimedRobot {
     double calculated_angle = (end_angle-driveTrain.getAngle360())+Math.toDegrees(target_yaw);
     double end_x = Math.abs(target_distance*Math.cos(Math.toRadians(calculated_angle)))-RobotMath.inchesToMeters(14);//Meters
     double end_y = Math.abs(target_distance*Math.sin(Math.toRadians(calculated_angle)))-RobotMath.inchesToMeters(10);//Meters
-    end_y *= Math.signum(target_yaw);
+    end_y *= -Math.signum(target_yaw);
     //if(end_angle != 0)
       //end_y = 0;
 
@@ -363,23 +363,23 @@ public class Robot extends TimedRobot {
       case 0://Rocket Near (Left)
         return RobotMap.NEAR_ROCKET_ANGLE;
       case 1://Rocket Cargo (Left)
-        return RobotMap.CARGO_HOLE_ANGLE;
-      case 2://Rocket Far (Left)
         return RobotMap.FAR_ROCKET_ANGLE;
+      case 2://Rocket Far (Left)
+        return RobotMap.CARGO_HOLE_ANGLE;
       case 3://Ship Left
-        return RobotMap.CARGO_SHIP_SIDE;
+        return RobotMap.NEAR_ROCKET_ANGLE_RIGHT;
       case 4://Ship Front
-        return RobotMap.CARGO_SHIP_FRONT;
+        return RobotMap.FAR_ROCKET_ANGLE_RIGHT;
       case 5://Ship Right
-        return -RobotMap.CARGO_SHIP_SIDE;
+        return RobotMap.CARGO_HOLE_ANGLE_RIGHT;
       case 6://Rocket Near (Right)
-        return -RobotMap.NEAR_ROCKET_ANGLE;
-      case 7://Rocket Cargo (Right)
-        return -RobotMap.CARGO_HOLE_ANGLE;
-      case 8://Rocket Far (Right)
-        return -RobotMap.FAR_ROCKET_ANGLE;
-      case 9://Loading Station
         return RobotMap.LOADING_STATION_ANGLE;
+      case 7://Rocket Cargo (Right)
+        return RobotMap.CARGO_SHIP_FRONT;
+      case 8://Rocket Far (Right)
+        return -RobotMap.CARGO_SHIP_SIDE;
+      case 9://Loading Station
+        return RobotMap.CARGO_SHIP_SIDE;
     }
     return 0;
   }

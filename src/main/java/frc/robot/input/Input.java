@@ -19,9 +19,11 @@ public class Input{
 
     private boolean elevatorManualMode = false;
     public boolean intakeManualMode = false;
+    private boolean zeroed = false;
 
     public Input(){
-        CreateTroy310Profile();
+        //CreateTroy310Profile();
+        CreateSingleProfile();
         current_profile = profiles.get(driver_index);
     }
 
@@ -42,8 +44,10 @@ public class Input{
                     
                     if(!elevatorManualMode)
                         Robot.driveTrain.tankDrive(left*current_profile.left_reverse, right*current_profile.right_reverse);
-                    else
+                    else{
+                        Robot.driveTrain.tankDrive(0, 0);
                         Robot.elevator.setPercent(left);
+                    }
                 }
                 //Event: "move_closed"
                 if(action.action_name.equals("move_closed")){
@@ -57,27 +61,44 @@ public class Input{
                 //Event: "move_sideways"
                 if(action.action_name.equals("move_sideways_closed")){
                     double forward = 0, turn = 0;
-                    if(Math.abs(current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number))-action.deadband > 0)
+                    zeroed = true;
+                    if(Math.abs(current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number))-action.deadband > 0){
                         forward = current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number);
-                    if(Math.abs(current_profile.joysticks[action.secondary.controller_number].getRawAxis(action.secondary.joystick_number))-action.secondary.deadband > 0)
-                        turn = current_profile.joysticks[action.secondary.controller_number].getRawAxis(action.secondary.joystick_number);
-                    if(!elevatorManualMode){
-                        Robot.driveTrain.tankDriveVelocity((forward-turn), (forward+turn));
-                    }else{
-                        Robot.elevator.setPercent(forward);
+                        zeroed = false;
                     }
+                    if(Math.abs(current_profile.joysticks[action.secondary.controller_number].getRawAxis(action.secondary.joystick_number))-action.secondary.deadband > 0){
+                        turn = current_profile.joysticks[action.secondary.controller_number].getRawAxis(action.secondary.joystick_number);
+                        zeroed = false;
+                    }
+
+                    Robot.driveTrain.tankDriveVelocity((forward-turn), (forward+turn));
+                }
+                //Event: "move_sideways_open"
+                if(action.action_name.equals("move_sideways_closed")){
+                    double forward = 0, turn = 0;
+                    zeroed = true;
+                    if(Math.abs(current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number))-action.deadband > 0){
+                        forward = current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number);
+                        zeroed = false;
+                    }
+                    if(Math.abs(current_profile.joysticks[action.secondary.controller_number].getRawAxis(action.secondary.joystick_number))-action.secondary.deadband > 0){
+                        turn = current_profile.joysticks[action.secondary.controller_number].getRawAxis(action.secondary.joystick_number);
+                        zeroed = false;
+                    }
+
+                    Robot.driveTrain.tankDrive((forward-turn), (forward+turn));
                 }
                 //Event: "intake_cargo_axis"
                 if(action.action_name.equals("intake_cargo_axis")){
                     if(Math.abs(current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number))-action.deadband > 0 && !intakeManualMode){
-                        Robot.intake.setCargoMotor(current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number));
+                        Robot.intake.setCargoMotor(-current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number));
                         cargoMoving = true;
                     }
                 }
                 //Event: "outtake_cargo_axis"
                 if(action.action_name.equals("outtake_cargo_axis")){
                     if(Math.abs(current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number))-action.deadband > 0  && !intakeManualMode){
-                        Robot.intake.setCargoMotor(-current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number));
+                        Robot.intake.setCargoMotor(current_profile.joysticks[action.controller_number].getRawAxis(action.joystick_number));
                         cargoMoving = true;
                     }
                 }
@@ -161,6 +182,7 @@ public class Input{
                 if(action.action_name.equals("elevator_manual_mode")){
                     if(current_profile.joysticks[action.controller_number].getRawButton(action.joystick_number)){
                         elevatorManualMode = true;
+                        Robot.elevator.setPercent(-current_profile.joysticks[action.controller_number].getRawAxis(1));
                     }
                 }
 
@@ -263,6 +285,21 @@ public class Input{
             //Robot.elevator.setPercent(0);
     }
 
+    public boolean isZeroed(){
+        return zeroed;
+    }
+
+    public boolean anyAxis(){
+        boolean value = false;
+
+        for(Joystick stick : current_profile.joysticks){
+            if(stick.getX() != 0 || stick.getY() != 0 || stick.getZ() != 0)
+                value = true;
+        }
+
+        return value;
+    }
+
     private boolean isRumbleing = false;
     private double rumble_count = 0, rumble_length = 0;
     private Joystick rumble_controller;
@@ -307,33 +344,67 @@ public class Input{
         profiles.add(troy);
     }
 
-    void CreateTroy310Profile(){
+    void CreateSingleProfile(){
         final int F310 = 0;
-        DriverProfile troy_f310 = new DriverProfile("Troy But Better", ControllerType.F310, ControlStyle.TankDrive, 1, false);
+        DriverProfile troy_f310 = new DriverProfile("Troy But Better", ControllerType.F310, ControlStyle.TankDrive, 2, false);
         
-        //troy_f310.AddAction(moveClosed(F310));
         troy_f310.AddAction(moveSidways(F310));
 
-        troy_f310.AddAction(new JoystickAction("intake_cargo_axis", F310, 2, EventType.Axis));
-        troy_f310.AddAction(new JoystickAction("outtake_cargo_axis", F310, 3, EventType.Axis));
+        troy_f310.AddAction(new JoystickAction("intake_cargo_axis", F310, 3, EventType.Axis));
+        troy_f310.AddAction(new JoystickAction("outtake_cargo_axis", F310, 2, EventType.Axis));
 
         troy_f310.AddAction(new JoystickAction("intake_hatch_toggle", F310, 1, EventType.ButtonPress));
         troy_f310.AddAction(new JoystickAction("hatch_drop_toggle", F310, 4, EventType.ButtonPress));
-        troy_f310.AddAction(new JoystickAction("gear_change_toggle", F310, 8, EventType.ButtonPress));
+        troy_f310.AddAction(new JoystickAction("gear_change_toggle", F310, 2, EventType.ButtonPress));
         troy_f310.AddAction(new JoystickAction("reverse_control_left", F310, 9, EventType.ButtonPress));
         troy_f310.AddAction(new JoystickAction("reverse_control_right", F310, 10, EventType.ButtonPress));
         troy_f310.AddAction(new JoystickAction("lift_toggle", F310, 7, EventType.ButtonPress));
-        //troy_f310.AddAction(new JoystickAction("forward_lock", F310, 3, EventType.ButtonPress));
-        //troy_f310.AddAction(new JoystickAction("forward_lock", F310, 3, EventType.ButtonRelease));
-        troy_f310.AddAction(new JoystickAction("activate_vision", F310, 3, EventType.ButtonPress));
-        troy_f310.AddAction(new JoystickAction("elevator_manual_mode", F310, 2, EventType.ButtonPress));
-        troy_f310.AddAction(new JoystickAction("elevator_lock", F310, 2, EventType.ButtonRelease));
 
         troy_f310.AddAction(new JoystickAction("elevetor_increase_POV", F310, 0, EventType.POV));
         troy_f310.AddAction(new JoystickAction("elevator_decrease_POV", F310, 180, EventType.POV));
 
         troy_f310.AddAction(new JoystickAction("elevator_loading_POV", F310, 90, EventType.POV));
         troy_f310.AddAction(new JoystickAction("elevator_loading_POV", F310, 270, EventType.POV));
+
+        troy_f310.AddAction(new JoystickAction("elevator_manual_mode", F310, 2, EventType.ButtonPress));
+        troy_f310.AddAction(new JoystickAction("elevator_lock", F310, 2, EventType.ButtonRelease));
+
+        profiles.add(troy_f310);
+    }
+
+    void CreateTroy310Profile(){
+        final int F310 = 0;
+        final int ELEV = 1;
+        DriverProfile troy_f310 = new DriverProfile("Troy But Better", ControllerType.F310, ControlStyle.TankDrive, 2, false);
+        
+        //troy_f310.AddAction(moveClosed(F310));
+        troy_f310.AddAction(moveSidways(F310));
+
+        troy_f310.AddAction(new JoystickAction("intake_cargo_axis", F310, 3, EventType.Axis));
+        troy_f310.AddAction(new JoystickAction("outtake_cargo_axis", F310, 2, EventType.Axis));
+
+        troy_f310.AddAction(new JoystickAction("intake_hatch_toggle", F310, 1, EventType.ButtonPress));
+        troy_f310.AddAction(new JoystickAction("hatch_drop_toggle", F310, 4, EventType.ButtonPress));
+        troy_f310.AddAction(new JoystickAction("gear_change_toggle", F310, 2, EventType.ButtonPress));
+        troy_f310.AddAction(new JoystickAction("reverse_control_left", F310, 9, EventType.ButtonPress));
+        troy_f310.AddAction(new JoystickAction("reverse_control_right", F310, 10, EventType.ButtonPress));
+        troy_f310.AddAction(new JoystickAction("lift_toggle", F310, 7, EventType.ButtonPress));
+        
+        //troy_f310.AddAction(new JoystickAction("forward_lock", F310, 3, EventType.ButtonPress));
+        //troy_f310.AddAction(new JoystickAction("forward_lock", F310, 3, EventType.ButtonRelease));
+
+        troy_f310.AddAction(new JoystickAction("elevetor_increase_POV", ELEV, 0, EventType.POV));
+        troy_f310.AddAction(new JoystickAction("elevator_decrease_POV", ELEV, 180, EventType.POV));
+
+        troy_f310.AddAction(new JoystickAction("elevator_loading_POV", ELEV, 90, EventType.POV));
+        troy_f310.AddAction(new JoystickAction("elevator_loading_POV", ELEV, 270, EventType.POV));
+
+        troy_f310.AddAction(new JoystickAction("activate_vision", ELEV, 3, EventType.ButtonPress));
+        troy_f310.AddAction(new JoystickAction("cancel_vision", ELEV, 5, EventType.ButtonPress));
+        troy_f310.AddAction(new JoystickAction("elevator_manual_mode", ELEV, 2, EventType.ButtonPress));
+        troy_f310.AddAction(new JoystickAction("elevator_lock", ELEV, 2, EventType.ButtonRelease));
+
+
         profiles.add(troy_f310);
     }
 

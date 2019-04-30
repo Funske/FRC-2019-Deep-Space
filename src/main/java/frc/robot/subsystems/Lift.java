@@ -23,4 +23,12 @@ public class Lift extends Subsystem{
             lift.set(Value.kReverse);
     }
 
+    public void setExtend(boolean extend){
+        isExtended = extend;
+        if(isExtended)
+            lift.set(Value.kForward);
+        else
+            lift.set(Value.kReverse);
+    }
+
 }

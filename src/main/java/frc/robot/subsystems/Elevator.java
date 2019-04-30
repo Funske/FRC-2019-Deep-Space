@@ -16,10 +16,11 @@ import frc.robot.util.RobotMath;
 
 public class Elevator extends Subsystem{
 
-    private ElevatorWidget widget = new ElevatorWidget("N/A", 0.0);
+    private ElevatorWidget widget = new ElevatorWidget("N/A", 0.0, 0);
+    private int lastTargetLevel = 0;
 
     TalonSRX elevator = new TalonSRX(RobotMap.ELEVATOR);
-    private final boolean sensorPhase = false;
+    private final boolean sensorPhase = true;
     public double speed = 0.9;
 
     private boolean cargo_mode = true;
@@ -76,6 +77,16 @@ public class Elevator extends Subsystem{
         RobotMath.setPID(elevator, going_up);
         RobotMath.setPID(elevator, going_down);
         RobotMath.setPID(elevator, going_level3);
+    }
+
+    public void elevatorPeriodic(){
+        if(widget.getTargetLevel() != lastTargetLevel)//There has been a change in the level target
+            setLevel(widget.getTargetLevel());
+
+        if(widget.getEncoderPosition() == 0 && getPosition() != 0)
+            setPosition(0);
+
+        lastTargetLevel = widget.getTargetLevel();
     }
 
     public void setPD(){

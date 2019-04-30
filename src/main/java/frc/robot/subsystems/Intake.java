@@ -38,12 +38,33 @@ public class Intake extends Subsystem{
         Robot.elevator.setCargoMode(!grabDown);
         if(grabDown)
             hatchDrop.set(Value.kForward);
-        else
+        else{
             hatchDrop.set(Value.kReverse);
+            setHatchIntake(true);
+        }
+    }
+
+    public void setHatchDrop(boolean down){
+        grabDown = down;
+        Robot.elevator.setCargoMode(!grabDown);
+        if(grabDown)
+            hatchDrop.set(Value.kForward);
+        else{
+            hatchDrop.set(Value.kReverse);
+            setHatchIntake(true);
+        }
     }
 
     public void toggleHatchIntake(){
         grabOpen = !grabOpen;
+        if(grabOpen)
+            hatchIntake.set(Value.kForward);
+        else
+            hatchIntake.set(Value.kReverse);
+    }
+
+    public void setHatchIntake(boolean open){
+        grabOpen = open;
         if(grabOpen)
             hatchIntake.set(Value.kForward);
         else

@@ -4,6 +4,8 @@ import frc.robot.util.PIDData;
 
 public class RobotMap{
 
+    public static final boolean COMPETITON_MODE = false;
+
     //Motors
     public static final int LEFT_FRONT_RITA = 5, LEFT_REAR_RITA = 6, RIGHT_FRONT_RITA = 4, RIGHT_REAR_RITA = 3;
     public static final int LEFT_FRONT = 2, LEFT_REAR = 11, RIGHT_FRONT = 13, RIGHT_REAR = 14;
@@ -24,7 +26,7 @@ public class RobotMap{
     public static final PIDData DRIVEPID_LOW = new PIDData(0.1, 0, 0, 0.12132, 1, TIMEOUT);
     public static final int ENCODER_UNITS = 4096;
     public static final int MAX_VELOCITY = 2000;//Per 100ms was 2000
-    public static final int MAX_VELOCITY_HIGH = 3600;//Per 100ms
+    public static final int MAX_VELOCITY_HIGH = 3000;//Per 100ms
     public static final int MAX_INCH_PER_SECOND = 92;//in/s
     public static final double MAX_METERS_PER_SECOND = 2.682243;//Real: 2.682243
     public static final double MAX_RPM = 292.96875;
@@ -36,11 +38,14 @@ public class RobotMap{
     public static final double VISION_JERK = 60;//m/s^3
     
     //Field Information
-    public static final double NEAR_ROCKET_ANGLE = 32;//Calibrated to test field
-    public static final double FAR_ROCKET_ANGLE = 155;//Calibrated to test field
+    public static final double NEAR_ROCKET_ANGLE = 30;//Calibrated to test field
+    public static final double FAR_ROCKET_ANGLE = 152;//Calibrated to test field
     public static final double CARGO_HOLE_ANGLE = 90;
+    public static final double NEAR_ROCKET_ANGLE_RIGHT = -32;//Calibrated to test field
+    public static final double FAR_ROCKET_ANGLE_RIGHT = -155;//Calibrated to test field
+    public static final double CARGO_HOLE_ANGLE_RIGHT = -95;
     public static final double LOADING_STATION_ANGLE = 180;
-    public static final double CARGO_SHIP_SIDE = 0;
+    public static final double CARGO_SHIP_SIDE = 90;
     public static final double CARGO_SHIP_FRONT = 0;
     public static final int LEFT_DIR = 1;
     public static final int RIGHT_DIR = -1;
@@ -50,7 +55,7 @@ public class RobotMap{
     public static final int LEVEL1_POS = 28672;//7  28,672
     public static final int LEVEL2_POS = 63023;//14
     public static final int LEVEL3_POS = 86200;//21.75
-    public static final int LEVEL_CARGO = 49152;
+    public static final int LEVEL_CARGO = 45056;//11
 
     public static final int LEVEL0_POS_HATCH = 0;//2.5
     public static final int LEVEL1_POS_HATCH = 10240;//2.5

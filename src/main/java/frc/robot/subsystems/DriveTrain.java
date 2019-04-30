@@ -24,9 +24,9 @@ public class DriveTrain extends Subsystem{
     public boolean highGear = true;
 
     //Sensor Phase
-    private boolean left_phase = false, right_phase = false;
+    private boolean left_phase = true, right_phase = true;
     //Inverted
-    private InvertType left_inverted = InvertType.None, right_inverted = InvertType.InvertMotorOutput;
+    private InvertType left_inverted = InvertType.None, right_inverted = InvertType.None;
 
     //Speeds
     private double teleopSpeed = 1.0;
@@ -37,7 +37,7 @@ public class DriveTrain extends Subsystem{
     public double angle_lock = 0;
 
     //Drive Train Status
-    public static enum DriverStatus{Control, Vision};
+    public static enum DriverStatus{Control, Vision, Cargo};
     public DriverStatus status = DriverStatus.Control;
 
     public DoubleSolenoid gearChange = new DoubleSolenoid(RobotMap.GEAR_IN, RobotMap.GEAR_OUT);
@@ -57,8 +57,8 @@ public class DriveTrain extends Subsystem{
         right_rear = new TalonSRX(RobotMap.RIGHT_REAR);
         pigeon = new PigeonIMU(right_rear);
 
-        left_inverted = InvertType.InvertMotorOutput;
-        right_inverted = InvertType.None;
+        left_inverted = InvertType.None;
+        right_inverted = InvertType.InvertMotorOutput;
 
         setSlaves();
         setMaxSpeed(currentSpeed);
@@ -250,7 +250,7 @@ public class DriveTrain extends Subsystem{
 
     public double getAngle360(){//Returns and angle (-360, 360)
         double temp = getAngle();
-        return (Math.abs(temp) % 180)*Math.signum(temp);
+        return (Math.abs(temp) % 360)*Math.signum(temp);
     }
 
     public double getGyroRate(){
